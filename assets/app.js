@@ -66,8 +66,10 @@ const TimesheetApp = () => {
       '04-04': '兒童節',
       '04-05': '清明節',
       '05-01': '勞動節',
+      '09-28': '教師節',
       '10-10': '國慶日',
-      '12-25': '聖誕節'
+      '10-25': '臺灣光復暨金門古寧頭大捷紀念日',
+      '12-25': '行憲紀念日'
     };
     if (fixedHolidays[mmdd]) return fixedHolidays[mmdd];
     const holidays2026 = {
@@ -80,11 +82,13 @@ const TimesheetApp = () => {
       '2026-02-20': '初四',
       '2026-02-21': '初五',
       '2026-02-22': '春節連假',
-      '2026-04-03': '補假',
-      '2026-04-06': '補假',
+      '2026-02-27': '和平紀念日補假',
+      '2026-04-03': '兒童節補假',
+      '2026-04-06': '清明節補假',
       '2026-06-19': '端午節',
       '2026-09-25': '中秋節',
-      '2026-10-09': '補假'
+      '2026-10-09': '國慶日補假',
+      '2026-10-26': '臺灣光復暨金門古寧頭大捷紀念日補假'
     };
     if (y === 2026) return holidays2026[dateStr] || null;
     return null;
@@ -105,6 +109,27 @@ const TimesheetApp = () => {
     return result;
   };
   const daysInMonth = getDaysInMonth(year, month);
+  // Only initialize missing workday entries; explicit zero/blank values are user edits.
+  useEffect(() => {
+    setStaffList(previous => {
+      let changed = false;
+      const next = previous.map(staff => {
+        const hours = { ...staff.hours };
+        let staffChanged = false;
+        daysInMonth.forEach(day => {
+          const key = `${year}-${month}-${day.date}`;
+          if (!day.isWeekend && !day.holiday && !Object.prototype.hasOwnProperty.call(hours, key)) {
+            hours[key] = 2;
+            staffChanged = true;
+          }
+        });
+        if (!staffChanged) return staff;
+        changed = true;
+        return { ...staff, hours };
+      });
+      return changed ? next : previous;
+    });
+  }, [year, month, staffList]);
   const weekDayNames = ['日', '一', '二', '三', '四', '五', '六'];
   const handleHoursChange = (staffId, day, value) => {
     const numValue = value === '' ? '' : parseFloat(value);
@@ -114,7 +139,7 @@ const TimesheetApp = () => {
           ...staff.hours
         };
         const key = `${year}-${month}-${day}`;
-        if (value === '') delete newHours[key];else newHours[key] = numValue;
+        newHours[key] = numValue;
         return {
           ...staff,
           hours: newHours
@@ -383,6 +408,7 @@ const TimesheetApp = () => {
     className: "p-3 border border-slate-300 text-center w-[200px] sticky left-0 bg-slate-50 z-20 w-name"
   }, "姓名"), daysInMonth.map(day => React.createElement("th", {
     key: day.date,
+    title: day.holiday || '',
     className: `p-1 border border-slate-300 text-center w-[30px] w-day ${day.isWeekend || day.holiday ? 'bg-red-50 text-red-600 font-bold' : 'bg-white font-normal'}`
   }, React.createElement("div", {
     className: "text-[11px]"
@@ -416,7 +442,8 @@ const TimesheetApp = () => {
       className: `p-0 border border-slate-300 w-day ${day.isWeekend || day.holiday ? 'bg-red-50/30' : ''}`
     }, React.createElement("input", {
       type: "number",
-      value: staff.hours[key] || '',
+      value: staff.hours[key] ?? '',
+      'aria-label': `${staff.name || '人員'} ${year}/${month}/${day.date} 工時`,
       onChange: e => handleHoursChange(staff.id, day.date, e.target.value),
       className: "w-full h-full bg-transparent text-center py-3 focus:bg-white focus:outline-none transition font-bold text-sm"
     }));
@@ -480,9 +507,9 @@ const TimesheetApp = () => {
     className: "p-6 bg-slate-50 text-[11px] text-slate-400 flex justify-between items-center border-t print-hidden"
   }, React.createElement("div", {
     className: "flex gap-4"
-  }, React.createElement("span", null, "※ 本系統已更新 2026 年人事行政局連假邏輯"), React.createElement("span", null, "※ 資料會自動保存在您的瀏覽器中")), React.createElement("span", {
+  }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 上班日預填 2 小時，可修改；資料自動儲存")), React.createElement("span", {
     className: "hidden md:inline font-mono uppercase text-indigo-400"
-  }, "Precision Backup-Sync v2.6"))));
+  }, "Precision Backup-Sync v2.7"))));
 };
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(TimesheetApp, null));
