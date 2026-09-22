@@ -59,15 +59,16 @@
         workbook.calcProperties.fullCalcOnLoad = true;
         const sheet = workbook.addWorksheet('薪資報表', {pageSetup: {
           paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:1,
-          margins:{left:0.3,right:0.3,top:0.35,bottom:0.35,header:0.1,footer:0.1}
+          horizontalCentered:true,
+          margins:{left:0.28,right:0.28,top:0.3,bottom:0.3,header:0.1,footer:0.1}
         }});
-        sheet.columns = [5,10,7,7,10,9,9,9,9,9,11,11].map(width => ({width}));
+        sheet.columns = [6,11,8,8,10,9,9,9,9,9,12,12].map(width => ({width}));
         sheet.getColumn(6).hidden = !showHealth;
         sheet.getColumn(7).hidden = !showHealth;
         let r = 1;
         groups.forEach((group, groupIndex) => {
           const start = r;
-          sheet.mergeCells(r,1,r,12); sheet.getCell(r,1).value = title(group.bank); sheet.getRow(r).height = 30; r++;
+          sheet.mergeCells(r,1,r,12); sheet.getCell(r,1).value = title(group.bank); sheet.getRow(r).height = 38; r++;
           const header = r;
           ['編號','姓名','工時','時薪','薪資'].forEach((text,index) => {
             sheet.mergeCells(r,index+1,r+1,index+1); sheet.getCell(r,index+1).value = text;
@@ -76,7 +77,7 @@
           sheet.mergeCells(r,8,r,9); sheet.getCell(r,8).value = '勞保';
           sheet.getCell(r,10).value = '勞退'; sheet.getCell(r,11).value = '應請領'; sheet.getCell(r,12).value = '實領';
           ['自付','公付','自付','公付','公付','金額','金額'].forEach((text,index) => sheet.getCell(r+1,index+6).value = text);
-          sheet.getRow(r).height = 25; sheet.getRow(r+1).height = 25; r+=2;
+          sheet.getRow(r).height = 30; sheet.getRow(r+1).height = 30; r+=2;
           const first = r;
           group.rows.forEach((row,index) => {
             const values = [index+1,showNames ? row.staff.name : '',row.hours,Number(row.rate),null,
@@ -85,9 +86,9 @@
             sheet.getCell(r,5).value = {formula:'ROUND(C'+r+'*D'+r+',0)',result:row.wage};
             sheet.getCell(r,11).value = {formula:'E'+r+'+N(G'+r+')+N(I'+r+')+N(J'+r+')',result:row.claim};
             sheet.getCell(r,12).value = {formula:'E'+r+'-N(F'+r+')-N(H'+r+')',result:row.net};
-            sheet.getRow(r).height = 28;
+            sheet.getRow(r).height = 38;
             [4,6,7,8,9,10].forEach(col => {
-              sheet.getCell(r,col).font = {name:'Microsoft JhengHei',size:11,color:{argb:'FF174EA6'}};
+              sheet.getCell(r,col).font = {name:'Microsoft JhengHei',size:14,color:{argb:'FF174EA6'}};
               sheet.getCell(r,col).dataValidation = {type:'decimal',operator:'greaterThanOrEqual',formulae:[0],allowBlank:col!==4,showErrorMessage:true,error:'請輸入非負數。'};
             });
             r++;
@@ -103,20 +104,21 @@
           const last=r;
           for(let rr=start;rr<=last;rr++) for(let col=1;col<=12;col++){
             const cell=sheet.getCell(rr,col);
-            cell.font={name:'Microsoft JhengHei',size:11,...cell.font};
+            cell.font={name:'Microsoft JhengHei',size:14,...cell.font};
             cell.alignment={vertical:'middle',horizontal:col>=3&&rr>header+1?'right':'center',wrapText:true};
             if(rr>start) cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
             if(rr>=header&&rr<=header+1) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF1F5F9'}};
             if(col===8 && rr>header) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFEDD5'}};
-            if(rr===last) cell.font={...cell.font,bold:true};
+            if(rr===last) { cell.font={...cell.font,bold:true}; sheet.getRow(rr).height=34; }
             if(col>=3&&rr>header+1) cell.numFmt='General';
           }
-          sheet.getCell(start,1).font={name:'Microsoft JhengHei',size:15,bold:true};
+          sheet.getCell(start,1).font={name:'Microsoft JhengHei',size:18,bold:true};
           r+=2;
-          [[1,2,'製表'],[3,4,'出納'],[5,7,'學務主任'],[8,10,'會計主任'],[11,12,'校長']].forEach(([a,b,text])=>{
-            sheet.mergeCells(r,a,r,b);sheet.getCell(r,a).value=text;sheet.getCell(r,a).font={name:'Microsoft JhengHei',size:11};
+          (showHealth ? [[1,2,'製表'],[3,4,'出納'],[5,7,'學務主任'],[8,10,'會計主任'],[11,12,'校長']] : [[1,2,'製表'],[3,4,'出納'],[5,8,'學務主任'],[9,10,'會計主任'],[11,12,'校長']]).forEach(([a,b,text])=>{
+            sheet.mergeCells(r,a,r,b);sheet.getCell(r,a).value=text;sheet.getCell(r,a).font={name:'Microsoft JhengHei',size:14};
           });
-          sheet.getRow(r).height=30;
+          sheet.getRow(r).height=28;
+          sheet.getRow(r+1).height=96;
           if (groupIndex < groups.length - 1) {
             for (let col=1;col<=12;col++) sheet.getCell(r+2,col).border={bottom:{style:'dashed',color:{argb:'FF777777'}}};
             sheet.getRow(r+2).height=20;
@@ -146,14 +148,14 @@
       });
       clone.querySelectorAll('table').forEach(table => {
         const colgroup=document.createElement('colgroup');
-        const widths=showHealth ? [5,10,7,7,10,8,8,8,8,8,10.5,10.5] : [5,12,7,7,11,10,10,10,14,14];
+        const widths=showHealth ? [5,10,7,7,10,8,8,8,8,8,10.5,10.5] : [6,12,7,7,11,9,9,9,15,15];
         widths.forEach(width=>{const col=document.createElement('col');col.style.width=width+'%';colgroup.appendChild(col);});
         table.prepend(colgroup);
       });
       const popup = window.open('','_blank','width=1200,height=850');
       if (!popup) {setError('請允許彈出視窗後，再按列印／另存 PDF。');return;}
       popup.document.write('<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><title>'+year+'年'+month+'月臨時人員薪資報表</title><style>'+
-        '@page{size:A4 portrait;margin:12mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:16px;margin:0 0 8px}.payroll-group{break-inside:avoid;margin-bottom:18px}.payroll-group+.payroll-group{border-top:1px dashed #777;padding-top:20px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:7px 2px;text-align:center;font-size:11px;overflow-wrap:anywhere}th{background:#f1f5f9}.salary-signatures{display:flex;justify-content:space-between;padding:22px 0 26px;font-size:12px}.payroll-note{font-size:10px;line-height:1.6}tfoot{font-weight:bold}.labor-self{background:#ffedd5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+clone.innerHTML+
+        '@page{size:A4 portrait;margin:10mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:18pt;margin:0 0 12px}.payroll-group{break-inside:avoid;margin-bottom:18px}.payroll-group+.payroll-group{border-top:1px dashed #777;padding-top:20px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:8px 3px;text-align:center;font-size:14pt;line-height:1.4;overflow-wrap:anywhere}th{background:#f1f5f9;font-size:13pt}td{font-variant-numeric:tabular-nums}.salary-signatures{display:flex;justify-content:space-between;align-items:flex-start;height:40mm;box-sizing:border-box;padding:4mm 0 0;font-size:12pt}.payroll-note{font-size:10pt;line-height:1.6}tfoot{font-weight:bold}.labor-self{background:#ffedd5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+clone.innerHTML+
         '<p class="payroll-note">薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。<br>公付費用另列，不扣實領。保費未填時暫以 0 計算，空白欄位請於核定前補齊。</p></body></html>');
       popup.document.close();popup.focus();setTimeout(()=>popup.print(),300);
     };
