@@ -58,14 +58,14 @@
         workbook.creator = '臨時人員工時管理系統';
         workbook.calcProperties.fullCalcOnLoad = true;
         const sheet = workbook.addWorksheet('薪資報表', {pageSetup: {
-          paperSize:9, orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0,
+          paperSize:9, orientation:'portrait', fitToPage:true, fitToWidth:1, fitToHeight:1,
           margins:{left:0.3,right:0.3,top:0.35,bottom:0.35,header:0.1,footer:0.1}
         }});
-        sheet.columns = [6,12,9,9,13,11,11,11,11,11,13,13].map(width => ({width}));
+        sheet.columns = [5,10,7,7,10,9,9,9,9,9,11,11].map(width => ({width}));
         sheet.getColumn(6).hidden = !showHealth;
         sheet.getColumn(7).hidden = !showHealth;
         let r = 1;
-        groups.forEach(group => {
+        groups.forEach((group, groupIndex) => {
           const start = r;
           sheet.mergeCells(r,1,r,12); sheet.getCell(r,1).value = title(group.bank); sheet.getRow(r).height = 30; r++;
           const header = r;
@@ -116,7 +116,12 @@
           [[1,2,'製表'],[3,4,'出納'],[5,7,'學務主任'],[8,10,'會計主任'],[11,12,'校長']].forEach(([a,b,text])=>{
             sheet.mergeCells(r,a,r,b);sheet.getCell(r,a).value=text;sheet.getCell(r,a).font={name:'Microsoft JhengHei',size:11};
           });
-          sheet.getRow(r).height=30; r+=3;
+          sheet.getRow(r).height=30;
+          if (groupIndex < groups.length - 1) {
+            for (let col=1;col<=12;col++) sheet.getCell(r+2,col).border={bottom:{style:'dashed',color:{argb:'FF777777'}}};
+            sheet.getRow(r+2).height=20;
+          }
+          r+=3;
         });
         sheet.mergeCells(r,1,r,12);
         sheet.getCell(r,1).value='薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。';
@@ -139,10 +144,16 @@
       clone.querySelectorAll('input').forEach(element => {
         const span=document.createElement('span'); span.textContent=element.value; element.replaceWith(span);
       });
+      clone.querySelectorAll('table').forEach(table => {
+        const colgroup=document.createElement('colgroup');
+        const widths=showHealth ? [5,10,7,7,10,8,8,8,8,8,10.5,10.5] : [5,12,7,7,11,10,10,10,14,14];
+        widths.forEach(width=>{const col=document.createElement('col');col.style.width=width+'%';colgroup.appendChild(col);});
+        table.prepend(colgroup);
+      });
       const popup = window.open('','_blank','width=1200,height=850');
       if (!popup) {setError('請允許彈出視窗後，再按列印／另存 PDF。');return;}
       popup.document.write('<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><title>'+year+'年'+month+'月臨時人員薪資報表</title><style>'+
-        '@page{size:A4 landscape;margin:12mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:18px;margin:0 0 8px}.payroll-group{break-inside:avoid;margin-bottom:24px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:7px 3px;text-align:center;font-size:12px;overflow-wrap:anywhere}th{background:#f1f5f9}.salary-signatures{display:flex;justify-content:space-between;padding:20px 0}.payroll-note{font-size:11px}tfoot{font-weight:bold}.labor-self{background:#ffedd5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+clone.innerHTML+
+        '@page{size:A4 portrait;margin:12mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:16px;margin:0 0 8px}.payroll-group{break-inside:avoid;margin-bottom:18px}.payroll-group+.payroll-group{border-top:1px dashed #777;padding-top:20px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:7px 2px;text-align:center;font-size:11px;overflow-wrap:anywhere}th{background:#f1f5f9}.salary-signatures{display:flex;justify-content:space-between;padding:22px 0 26px;font-size:12px}.payroll-note{font-size:10px;line-height:1.6}tfoot{font-weight:bold}.labor-self{background:#ffedd5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+clone.innerHTML+
         '<p class="payroll-note">薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。<br>公付費用另列，不扣實領。保費未填時暫以 0 計算，空白欄位請於核定前補齊。</p></body></html>');
       popup.document.close();popup.focus();setTimeout(()=>popup.print(),300);
     };
