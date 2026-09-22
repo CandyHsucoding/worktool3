@@ -24,6 +24,8 @@
   };
   window.PayrollPanel = function PayrollPanel({ staffList, setStaffList, year, month, calculateTotal, showNames }) {
     const [busy, setBusy] = React.useState(false);
+    const [showHealth, setShowHealth] = React.useState(false);
+    const visibleFields = fields.filter(([key]) => showHealth || !key.startsWith('health'));
     const [error, setError] = React.useState('');
     const period = year + '-' + month;
     const rows = staffList.map(staff => calculate(staff, year, month, calculateTotal(staff)));
@@ -39,6 +41,7 @@
     const input = (row, key, title, index) => h('input', {
       type:'number', min:0, step:'0.01', value:key === 'rate' ? row.rate : row.data[key] ?? '',
       'aria-label':label(row, index) + ' ' + title,
+      className:key === 'laborSelf' ? 'labor-self-input' : undefined,
       onChange:event => edit(row.staff.id, key, event.target.value)
     });
     const canExport = () => {
@@ -59,6 +62,8 @@
           margins:{left:0.3,right:0.3,top:0.35,bottom:0.35,header:0.1,footer:0.1}
         }});
         sheet.columns = [6,12,9,9,13,11,11,11,11,11,13,13].map(width => ({width}));
+        sheet.getColumn(6).hidden = !showHealth;
+        sheet.getColumn(7).hidden = !showHealth;
         let r = 1;
         groups.forEach(group => {
           const start = r;
@@ -102,6 +107,7 @@
             cell.alignment={vertical:'middle',horizontal:col>=3&&rr>header+1?'right':'center',wrapText:true};
             if(rr>start) cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
             if(rr>=header&&rr<=header+1) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF1F5F9'}};
+            if(col===8 && rr>header) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFEDD5'}};
             if(rr===last) cell.font={...cell.font,bold:true};
             if(col>=3&&rr>header+1) cell.numFmt='General';
           }
@@ -132,7 +138,7 @@
       const popup = window.open('','_blank','width=1200,height=850');
       if (!popup) {setError('請允許彈出視窗後，再按列印／另存 PDF。');return;}
       popup.document.write('<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><title>'+year+'年'+month+'月臨時人員薪資報表</title><style>'+
-        '@page{size:A4 landscape;margin:12mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:18px;margin:0 0 8px}.payroll-group{break-inside:avoid;margin-bottom:24px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:7px 3px;text-align:center;font-size:12px;overflow-wrap:anywhere}th{background:#f1f5f9}.salary-signatures{display:flex;justify-content:space-between;padding:20px 0}.payroll-note{font-size:11px}tfoot{font-weight:bold}</style></head><body>'+clone.innerHTML+
+        '@page{size:A4 landscape;margin:12mm}body{font-family:"Microsoft JhengHei",sans-serif;color:#000}h3{text-align:center;font-size:18px;margin:0 0 8px}.payroll-group{break-inside:avoid;margin-bottom:24px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #000;padding:7px 3px;text-align:center;font-size:12px;overflow-wrap:anywhere}th{background:#f1f5f9}.salary-signatures{display:flex;justify-content:space-between;padding:20px 0}.payroll-note{font-size:11px}tfoot{font-weight:bold}.labor-self{background:#ffedd5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+clone.innerHTML+
         '<p class="payroll-note">薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。<br>公付費用另列，不扣實領。保費未填時暫以 0 計算，空白欄位請於核定前補齊。</p></body></html>');
       popup.document.close();popup.focus();setTimeout(()=>popup.print(),300);
     };
@@ -144,6 +150,8 @@
           h('button',{type:'button',onClick:print},'列印／另存薪資 PDF'))),
       h('p',{className:'payroll-explanation'},'薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。公付費用另列，不扣實領。'),
       h('p',{className:'payroll-explanation'},year===2026?'2026 年預設時薪 196 元，可逐人、逐月修改。保費欄留白供填寫，未填時暫以 0 計。':'請核對本年度時薪。保費欄留白供填寫，未填時暫以 0 計。'),
+      h('label',{className:'payroll-health-toggle'},h('input',{type:'checkbox',checked:showHealth,onChange:event=>setShowHealth(event.target.checked)}),' 顯示健保欄位'),
+      !showHealth && rows.some(row=>numeric(row.data.healthSelf)!==0 || numeric(row.data.healthPublic)!==0) && h('p',{className:'payroll-explanation'},'本月已有健保金額，隱藏欄位後仍保留並納入計算；可勾選「顯示健保欄位」查看或修改。'),
       h('div',{className:'payroll-banks'},rows.map((row,index)=>h('label',{key:row.staff.id},label(row,index)+' 薪轉分組 ',
         h('select',{value:groupFor(row.staff),'aria-label':label(row,index)+' 薪轉分組',onChange:event=>{
           const bank=event.target.value;setStaffList(previous=>previous.map(staff=>staff.id===row.staff.id?{...staff,payrollBank:bank}:staff));
@@ -155,16 +163,16 @@
         h('div',{className:'payroll-scroll'},h('table',{className:'payroll-table'},
           h('thead',null,
             h('tr',null,...['編號','姓名','工時','時薪','薪資'].map(text=>h('th',{key:text,rowSpan:2},text)),
-              h('th',{colSpan:2},'健保'),h('th',{colSpan:2},'勞保'),h('th',null,'勞退'),h('th',null,'應請領'),h('th',null,'實領')),
-            h('tr',null,...['自付','公付','自付','公付','公付','金額','金額'].map((text,index)=>h('th',{key:index},text)))),
+              showHealth && h('th',{colSpan:2},'健保'),h('th',{colSpan:2},'勞保'),h('th',null,'勞退'),h('th',null,'應請領'),h('th',null,'實領')),
+            h('tr',null,...[...(showHealth ? ['自付','公付'] : []),'自付','公付','公付','金額','金額'].map((text,index)=>h('th',{key:index,className:index===(showHealth?2:0)?'labor-self':undefined},text)))),
           h('tbody',null,group.rows.map((row,index)=>h('tr',{key:row.staff.id},
             h('td',null,index+1),h('td',null,showNames?row.staff.name:''),
             h('td',null,money(row.hours)),h('td',null,input(row,'rate','時薪',index)),h('td',{'data-field':'wage'},money(row.wage)),
-            ...fields.map(([key,title])=>h('td',{key},input(row,key,title,index))),
+            ...visibleFields.map(([key,title])=>h('td',{key,className:key==='laborSelf'?'labor-self':undefined},input(row,key,title,index))),
             h('td',{'data-field':'claim'},money(row.claim)),h('td',{'data-field':'net'},money(row.net))))),
           h('tfoot',null,h('tr',null,h('td',{colSpan:2},'合計'),h('td',null,money(sum(group.rows,'hours'))),h('td',null,''),
             h('td',null,money(sum(group.rows,'wage'))),
-            ...fields.map(([key])=>h('td',{key},money(group.rows.reduce((total,row)=>total+numeric(row.data[key]),0)))),
+            ...visibleFields.map(([key])=>h('td',{key,className:key==='laborSelf'?'labor-self':undefined},money(group.rows.reduce((total,row)=>total+numeric(row.data[key]),0)))),
             h('td',null,money(sum(group.rows,'claim'))),h('td',null,money(sum(group.rows,'net'))))))),
         h('div',{className:'salary-signatures'},['製表','出納','學務主任','會計主任','校長'].map(text=>h('span',{key:text},text)))))),
       h('p',{className:'payroll-explanation'},'時薪與保費按月份自動儲存，並隨「資料備份／遷移」一併備份。')
