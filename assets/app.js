@@ -521,13 +521,13 @@ const TimesheetApp = () => {
     className: "text-amber-500 shrink-0"
   }), React.createElement("p", {
     className: "text-[11px] text-amber-700 leading-relaxed"
-  }, "提示：還原操作將覆蓋目前的輸入資料。備份碼包含所有人員姓名及工時資訊，請妥善保存。"))))), React.createElement("div", {
+  }, "提示：還原操作將覆蓋目前的輸入資料。備份碼包含所有人員姓名、工時、時薪及保費資訊，請妥善保存。"))))), React.createElement(window.PayrollPanel, { staffList, setStaffList, year, month, calculateTotal, showNames }), React.createElement("div", {
     className: "p-6 bg-slate-50 text-[11px] text-slate-400 flex justify-between items-center border-t print-hidden"
   }, React.createElement("div", {
     className: "flex gap-4"
   }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 溫美萍、郭恒妘上班日預填 2 小時；官麗珠留白，工時可自行修改")), React.createElement("span", {
     className: "hidden md:inline font-mono uppercase text-indigo-400"
-  }, "Precision Backup-Sync v2.8"))));
+  }, "Payroll v3.0"))));
 };
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(TimesheetApp, null));
