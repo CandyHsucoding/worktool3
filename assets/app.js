@@ -45,14 +45,31 @@ const TimesheetApp = () => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupString, setBackupString] = useState('');
-  const defaultStaff = [{
-    id: 1,
-    name: '',
-    hours: {}
-  }];
+  const staffNames = ['溫美萍', '郭恒妘', '官麗珠'];
+  const defaultStaff = staffNames.map((name, index) => ({ id: index + 1, name, hours: {} }));
   const [staffList, setStaffList] = useState(() => {
     const savedData = localStorage.getItem('timesheet_data_v2');
-    return savedData ? JSON.parse(savedData) : defaultStaff;
+    const saved = savedData ? JSON.parse(savedData) : defaultStaff;
+    if (localStorage.getItem('timesheet_roster_v1')) return saved;
+    // Keep the original data before the one-time roster/default migration.
+    if (savedData) localStorage.setItem('timesheet_before_roster_v1', savedData);
+    const migrated = saved.filter(staff =>
+      staff.name.trim() || Object.values(staff.hours || {}).some(value => value !== 2 && value !== '')
+    ).map(staff => {
+      if (staff.name.trim() !== '官麗珠') return staff;
+      // The previous release prefilled everyone with 2; clear these once.
+      const hours = { ...staff.hours };
+      Object.keys(hours).forEach(key => { if (hours[key] === 2) hours[key] = ''; });
+      return { ...staff, hours };
+    });
+    staffNames.forEach((name, index) => {
+      if (!migrated.some(staff => staff.name.trim() === name)) {
+        migrated.push({ id: 'roster-' + index, name, hours: {} });
+      }
+    });
+    localStorage.setItem('timesheet_data_v2', JSON.stringify(migrated));
+    localStorage.setItem('timesheet_roster_v1', '1');
+    return migrated;
   });
   useEffect(() => {
     localStorage.setItem('timesheet_data_v2', JSON.stringify(staffList));
@@ -114,6 +131,7 @@ const TimesheetApp = () => {
     setStaffList(previous => {
       let changed = false;
       const next = previous.map(staff => {
+        if (!['溫美萍', '郭恒妘'].includes(staff.name.trim())) return staff;
         const hours = { ...staff.hours };
         let staffChanged = false;
         daysInMonth.forEach(day => {
@@ -507,9 +525,9 @@ const TimesheetApp = () => {
     className: "p-6 bg-slate-50 text-[11px] text-slate-400 flex justify-between items-center border-t print-hidden"
   }, React.createElement("div", {
     className: "flex gap-4"
-  }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 上班日預填 2 小時，可修改；資料自動儲存")), React.createElement("span", {
+  }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 溫美萍、郭恒妘上班日預填 2 小時；官麗珠留白，工時可自行修改")), React.createElement("span", {
     className: "hidden md:inline font-mono uppercase text-indigo-400"
-  }, "Precision Backup-Sync v2.7"))));
+  }, "Precision Backup-Sync v2.8"))));
 };
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(TimesheetApp, null));
