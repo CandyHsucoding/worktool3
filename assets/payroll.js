@@ -120,10 +120,14 @@
         });
         sheet.mergeCells(r,1,r,12);
         sheet.getCell(r,1).value='薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。';
-        sheet.getRow(r).height=25;
+        sheet.getCell(r,1).alignment={wrapText:true,vertical:'middle'};
+        sheet.getCell(r,1).font={name:'Microsoft JhengHei',size:10};
+        sheet.getRow(r).height=42;
         sheet.mergeCells(r+1,1,r+1,12);
         sheet.getCell(r+1,1).value='公付費用另列，不扣實領。保費未填時暫以 0 計算，空白欄位請於核定前補齊。';
-        sheet.getRow(r+1).height=25;
+        sheet.getCell(r+1,1).alignment={wrapText:true,vertical:'middle'};
+        sheet.getCell(r+1,1).font={name:'Microsoft JhengHei',size:10};
+        sheet.getRow(r+1).height=30;
         sheet.pageSetup.printArea='A1:L'+(r+1);
         saveBlob(new Blob([await workbook.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),year+'年'+month+'月臨時人員薪資報表.xlsx');
       } catch (e) {setError(e.message || '匯出失敗，請重試。');}
