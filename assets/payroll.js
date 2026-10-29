@@ -168,6 +168,7 @@
           h('button',{type:'button',onClick:print},'列印／另存薪資 PDF'))),
       h('p',{className:'payroll-explanation'},'薪資＝工時×時薪（四捨五入至元）；應請領＝薪資＋健保公付＋勞保公付＋勞退公付；實領＝薪資－健保自付－勞保自付。公付費用另列，不扣實領。'),
       h('p',{className:'payroll-explanation'},defaultRate(year)!==''?year+' 年預設時薪 '+defaultRate(year)+' 元，可逐人、逐月修改。保費欄留白供填寫，未填時暫以 0 計。':'請核對本年度時薪。保費欄留白供填寫，未填時暫以 0 計。'),
+      window.InsuranceImport && h(window.InsuranceImport,{staffList,setStaffList,year,month}),
       h('label',{className:'payroll-health-toggle'},h('input',{type:'checkbox',checked:showHealth,onChange:event=>setShowHealth(event.target.checked)}),' 顯示健保欄位'),
       !showHealth && rows.some(row=>numeric(row.data.healthSelf)!==0 || numeric(row.data.healthPublic)!==0) && h('p',{className:'payroll-explanation'},'本月已有健保金額，隱藏欄位後仍保留並納入計算；可勾選「顯示健保欄位」查看或修改。'),
       h('div',{className:'payroll-banks'},rows.map((row,index)=>h('label',{key:row.staff.id},label(row,index)+' 薪轉分組 ',
