@@ -105,10 +105,15 @@ const TimesheetApp = () => {
       '2026-06-19': '端午節',
       '2026-09-25': '中秋節',
       '2026-10-09': '國慶日補假',
-      '2026-10-26': '臺灣光復暨金門古寧頭大捷紀念日補假'
+      '2026-10-26': '臺灣光復暨金門古寧頭大捷紀念日補假',
+      '2026-12-21': '校慶補假'
     };
     if (y === 2026) return holidays2026[dateStr] || null;
     return null;
+  };
+  // 週末但學校需要供餐的日期，視為上班日
+  const extraWorkdays = {
+    '2026-12-19': '校慶供餐'
   };
   const getDaysInMonth = (y, m) => {
     const days = new Date(y, m, 0).getDate();
@@ -116,10 +121,11 @@ const TimesheetApp = () => {
     for (let i = 1; i <= days; i++) {
       const date = new Date(y, m - 1, i);
       const dayOfWeek = date.getDay();
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       result.push({
         date: i,
         dayOfWeek: dayOfWeek,
-        isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+        isWeekend: (dayOfWeek === 0 || dayOfWeek === 6) && !extraWorkdays[dateStr],
         holiday: getHolidayData(y, m, i)
       });
     }
@@ -365,7 +371,13 @@ const TimesheetApp = () => {
     className: "flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 shadow-sm transition active:scale-95"
   }, React.createElement(Icon, {
     name: "plus"
-  }), " 新增人員"), React.createElement("div", {
+  }), " 新增人員"), React.createElement(window.ScheduleImport, {
+    staffList,
+    setStaffList,
+    year,
+    month,
+    Icon
+  }), React.createElement("div", {
     className: "relative"
   }, React.createElement("button", {
     onClick: () => setShowDownloadMenu(!showDownloadMenu),
@@ -525,7 +537,7 @@ const TimesheetApp = () => {
     className: "p-6 bg-slate-50 text-[11px] text-slate-400 flex justify-between items-center border-t print-hidden"
   }, React.createElement("div", {
     className: "flex gap-4"
-  }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 溫美萍、郭恒妘上班日預填 2 小時；官麗珠留白，工時可自行修改")), React.createElement("span", {
+  }, React.createElement("span", null, "※ 已核對 2026 年人事行政總處假日；其他年度請核對行事曆"), React.createElement("span", null, "※ 溫美萍、郭恒妘上班日預填 2 小時；官麗珠留白，工時可自行修改"), React.createElement("span", null, "※ 按「帶入排班表」可依送餐排班系統填入請假與代班")), React.createElement("span", {
     className: "hidden md:inline font-mono uppercase text-indigo-400"
   }, "Payroll v3.0"))));
 };
