@@ -106,15 +106,13 @@ const TimesheetApp = () => {
       '2026-09-25': '中秋節',
       '2026-10-09': '國慶日補假',
       '2026-10-26': '臺灣光復暨金門古寧頭大捷紀念日補假',
-      '2026-12-21': '校慶補假'
+      '2026-12-14': '校慶補休'
     };
     if (y === 2026) return holidays2026[dateStr] || null;
     return null;
   };
   // 週末但學校需要供餐的日期，視為上班日
-  const extraWorkdays = {
-    '2026-12-19': '校慶供餐'
-  };
+  const extraWorkdays = {};
   const getDaysInMonth = (y, m) => {
     const days = new Date(y, m, 0).getDate();
     const result = [];
