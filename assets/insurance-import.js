@@ -5,8 +5,19 @@
     const value = String(text ?? '').replace(/[,\s元]/g, '');
     return /^\d+(\.\d+)?$/.test(value) ? Number(value) : null;
   };
-  // 圖片辨識的數字常黏著句點、Word 換行符號等雜字，只取前面的數字
-  const toOcrNumber = text => { const match = String(text ?? '').match(/^\D?(\d+)\D*$/); return match ? Number(match[1]) : null; };
+  // 圖片辨識的數字常黏著句點、符號等雜字（如「8$4」「12540:」），去掉雜字只留數字；雜字比數字多的視為非數字
+  const toOcrNumber = text => {
+    const value = String(text ?? '').replace(/\s/g, ''), digits = value.replace(/\D/g, '');
+    return digits && digits.length * 2 >= value.length ? Number(digits) : null;
+  };
+  // 姓名辨識常錯一個字（溫美萍→溫美華）：同字數、只差一個字，且只對得上一位人員時視為同一人
+  const variants = { 恒: '恆', 台: '臺', 峰: '峯', 群: '羣', 着: '著', 痴: '癡', 床: '牀', 爲: '為', 衆: '眾' }; // 異體字視為同一字
+  const sameChar = (a, b) => a === b || (variants[a] || a) === (variants[b] || b);
+  const fuzzyName = (cell, names) => {
+    const close = names.filter(name => name.length === cell.length && name.length >= 3 &&
+      [...name].filter((char, i) => !sameChar(char, cell[i])).length <= 1);
+    return close.length === 1 ? close[0] : null;
+  };
 
   // 圖片辨識出的文字：去掉表格框線、全形數字轉半形、中文字間的空白合併、中文與數字分開
   const cleanOcrLine = line => line
@@ -18,17 +29,34 @@
   // 去掉最後一位數（辨識時把 Word 的換行符號「↵」讀成數字）
   const dropLastDigit = value => value >= 10 ? Math.floor(value / 10) : value;
 
+  const pensionOf = (grade, days) => Math.round(grade * 0.06 * days / 30);
+  const validDays = days => Number.isInteger(days) && days >= 1 && days <= 31 ? days : null;
+
   // 用保費的計算關係檢查辨識結果：勞退＝級距×6%×天數/30；勞保個人負擔約為機關補助的 2/7
-  const checkRow = (row, fromImage) => {
+  // grades：可能的勞退級距（本列讀到的勞退級距、勞保級距、全表最常見的級距），worked：工時表的出勤天數
+  const checkRow = (row, fromImage, grades, worked) => {
     const notes = [];
-    if (row.pensionGrade && row.days) {
-      const expected = Math.round(row.pensionGrade * 0.06 * row.days / 30);
-      if (row.pensionPublic !== expected) {
-        if (fromImage && dropLastDigit(row.pensionPublic) === expected) {
-          notes.push('勞退公付 ' + row.pensionPublic + ' 疑為辨識錯誤，已改為 ' + expected);
-          row.pensionPublic = expected;
-        } else notes.push('勞退公付與「級距×6%×天數÷30＝' + expected + '」不同，請核對');
+    if (fromImage) {
+      // 圖片的灰底欄、合併儲存格常讀錯，用公式把級距、天數、勞退金額互相驗證
+      const dayOptions = [validDays(row.days), validDays(worked)].filter(Boolean);
+      const fits = (grade, days) => pensionOf(grade, days) === row.pensionPublic;
+      let found = null;
+      for (const grade of grades) for (const days of dayOptions) if (!found && fits(grade, days)) found = { grade, days };
+      for (const grade of grades) for (let days = 1; days <= 31 && !found; days++) if (row.pensionPublic && fits(grade, days)) found = { grade, days };
+      if (found) {
+        row.pensionGrade = found.grade;
+        if (!validDays(row.days) || row.days !== found.days) row.days = found.days; // 天數讀錯時以勞退金額反推
+      } else if (grades.length) {
+        const days = validDays(row.days) ?? validDays(worked);
+        if (days) {
+          const expected = pensionOf(grades[0], days);
+          notes.push('勞退公付讀成 ' + row.pensionPublic + '，看不清楚，已依「級距 ' + grades[0] + '×6%×' + days + ' 天÷30」算成 ' + expected + '，請核對');
+          row.pensionPublic = expected; row.pensionGrade = grades[0]; row.days = days;
+        } else notes.push('勞退公付看不清楚，請對照圖片填寫');
       }
+    } else if (row.pensionGrade && row.days) {
+      const expected = pensionOf(row.pensionGrade, row.days);
+      if (row.pensionPublic !== expected) notes.push('勞退公付與「級距×6%×天數÷30＝' + expected + '」不同，請核對');
     }
     const ratio = (self, pub) => self / pub;
     const reasonable = (self, pub) => ratio(self, pub) > 0.2 && ratio(self, pub) < 0.4;
@@ -45,7 +73,7 @@
   };
 
   // 總務處表格欄位順序（姓名之後）：投保金額、勞保級距、勞保機關補助、勞保個人負擔、勞退級距、機關提繳6%、機關補助墊償、二代健保
-  window.parseInsurancePaste = (text, names = []) => {
+  window.parseInsurancePaste = (text, names = [], workedByName = {}) => {
     const lines = String(text).replace(/\r/g, '').split('\n').map(line => line.includes('\t') ? line : cleanOcrLine(line));
     const period = String(text).replace(/\s+/g, '').match(/投保期間[:：]?(\d{1,2})(?!\d)/); // 圖片辨識常把「月」讀錯，只看數字
     const rows = [];
@@ -57,16 +85,22 @@
       let nameIndex = cells.findIndex(cell => names.includes(cell));
       if (nameIndex < 0) nameIndex = cells.findIndex(cell => names.some(name => cell.includes(name)));
       if (nameIndex >= 0) cells[nameIndex] = names.find(name => cells[nameIndex].includes(name));
-      else nameIndex = cells.findIndex(cell => /^[一-鿿]{2,4}$/.test(cell));
+      else {
+        nameIndex = cells.findIndex(cell => /^[一-鿿]{2,4}$/.test(cell));
+        if (nameIndex >= 0 && !tabbed) cells[nameIndex] = fuzzyName(cells[nameIndex], names) ?? cells[nameIndex];
+      }
       if (nameIndex < 0) return;
       let values;
       if (tabbed) {
         values = [1, 2, 3, 4, 5, 6, 7].map(offset => toNumber(cells[nameIndex + offset]));
       } else {
-        // 沒有 Tab（從 PDF 複製或圖片辨識）：取姓名後連續的數字，空白的墊償欄無法分辨，只取前 6 個
+        // 沒有 Tab（從 PDF 複製或圖片辨識）：取姓名後的數字（跳過辨識出的雜字），空白的墊償欄無法分辨，只取前 6 個
         values = [];
-        for (const cell of cells.slice(nameIndex + 1)) { const n = toOcrNumber(cell); if (n === null) break; values.push(n); }
-        values = values.slice(0, 6);
+        for (const cell of cells.slice(nameIndex + 1)) {
+          if (/^[一-鿿]{2,4}$/.test(cell) && names.includes(cell)) break; // 下一位人員
+          const n = toOcrNumber(cell); if (n !== null) values.push(n);
+          if (values.length === 6) break;
+        }
       }
       const [insured, , laborPublic, laborSelf, pensionGrade, pension, arrears] = values;
       if (laborPublic == null && laborSelf == null && pension == null) return; // 表頭等非資料列
@@ -74,14 +108,26 @@
       const next = (lines[index + 1] || '').split(tabbed ? '\t' : /\s+/).map(cell => cell.trim());
       const days = next.some(cell => /^[一-鿿]{2,4}$/.test(cell)) ? null
         : tabbed ? toNumber(next[nameIndex + 1]) : next.map(toOcrNumber).find(n => n !== null) ?? null;
-      rows.push(checkRow({
-        name: cells[nameIndex], insured: insured ?? null, days, pensionGrade: pensionGrade ?? null,
+      rows.push({
+        tabbed, name: cells[nameIndex], insured: insured ?? null, days, laborGrade: values[1] ?? null, pensionGrade: pensionGrade ?? null,
         laborSelf: laborSelf ?? 0,
         laborPublic: (laborPublic ?? 0) + (arrears ?? 0),
         pensionPublic: pension ?? 0
-      }, !tabbed));
+      });
     });
-    return { month: period ? Number(period[1]) : null, rows };
+    // 全表最常出現的級距（多數人級距相同，某一格讀錯時用它補）
+    const counts = {};
+    // 廚工的級距不會低於 5000；只出現一次的級距多半是讀錯（如 12540 讀成 1240），有重複出現的才拿來驗算
+    rows.forEach(row => [row.laborGrade, row.pensionGrade].forEach(grade => { if (grade >= 5000 && grade <= 200000) counts[grade] = (counts[grade] || 0) + 1; }));
+    const all = Object.keys(counts).map(Number).sort((a, b) => counts[b] - counts[a]);
+    const common = all.some(grade => counts[grade] >= 2) ? all.filter(grade => counts[grade] >= 2) : all;
+    return {
+      month: period ? Number(period[1]) : null,
+      rows: rows.map(({ tabbed, ...row }) => {
+        const grades = common;
+        return checkRow(row, !tabbed, grades, workedByName[row.name]);
+      })
+    };
   };
 
   const workedDays = (staff, year, month) => {
@@ -101,20 +147,37 @@
     script.onerror = () => { tesseractLoading = null; reject(new Error('辨識元件下載失敗，請確認網路連線。')); };
     document.head.appendChild(script);
   }));
-  // 放大兩倍、轉黑白（灰色、黃色底色變白），再擦掉表格框線，辨識才讀得到表格裡的數字
+  // 放大、轉黑白，再擦掉表格框線，辨識才讀得到表格裡的數字。
+  // 黑白用「跟周圍比」的方式判斷（自適應二值化）：手機照片有陰影、灰底欄比較暗，固定門檻會把灰底欄的數字糊掉
   const prepareImage = file => new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
       const canvas = document.createElement('canvas');
-      const width = canvas.width = image.width * 2, height = canvas.height = image.height * 2;
+      const scale = Math.min(2, 3200 / Math.max(image.width, image.height)); // 小截圖放大兩倍，大照片不要放到太大
+      const width = canvas.width = Math.round(image.width * scale), height = canvas.height = Math.round(image.height * scale);
       const context = canvas.getContext('2d');
       context.imageSmoothingQuality = 'high';
       context.drawImage(image, 0, 0, width, height);
       URL.revokeObjectURL(image.src);
       const pixels = context.getImageData(0, 0, width, height), data = pixels.data;
+      const gray = new Float32Array(width * height);
+      for (let i = 0; i < width * height; i++) gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+      const sums = new Float64Array((width + 1) * (height + 1)); // 積分圖，快速算每點周圍的平均亮度
+      for (let y = 0; y < height; y++) {
+        let row = 0;
+        for (let x = 0; x < width; x++) { row += gray[y * width + x]; sums[(y + 1) * (width + 1) + x + 1] = sums[y * (width + 1) + x + 1] + row; }
+      }
+      const radius = Math.round(Math.max(width, height) / 40);
       const dark = new Uint8Array(width * height);
-      for (let i = 0; i < width * height; i++) dark[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2] < 150 ? 1 : 0;
-      const line = new Uint8Array(width * height), minRun = 80; // 連續 80 點以上的黑線視為框線
+      for (let y = 0; y < height; y++) {
+        const y0 = Math.max(0, y - radius), y1 = Math.min(height, y + radius + 1);
+        for (let x = 0; x < width; x++) {
+          const x0 = Math.max(0, x - radius), x1 = Math.min(width, x + radius + 1);
+          const mean = (sums[y1 * (width + 1) + x1] - sums[y0 * (width + 1) + x1] - sums[y1 * (width + 1) + x0] + sums[y0 * (width + 1) + x0]) / ((y1 - y0) * (x1 - x0));
+          dark[y * width + x] = gray[y * width + x] < Math.min(mean * 0.85, 200) ? 1 : 0;
+        }
+      }
+      const line = new Uint8Array(width * height), minRun = Math.max(80, Math.round(Math.max(width, height) / 25)); // 夠長的連續黑線視為框線
       const markRuns = (count, length, at) => {
         for (let a = 0; a < count; a++) {
           let run = 0;
@@ -151,7 +214,9 @@
     const [ocrStatus, setOcrStatus] = React.useState('');
     const [edits, setEdits] = React.useState({}); // 預覽表中手動修改的金額 { 姓名: { 欄位: 金額 } }
     const names = staffList.map(staff => staff.name.trim()).filter(Boolean);
-    const parsed = React.useMemo(() => window.parseInsurancePaste(text, names), [text, names.join()]);
+    const workedByName = Object.fromEntries(staffList.map(staff => [staff.name.trim(), workedDays(staff, year, month)]));
+    const workedKey = JSON.stringify(workedByName);
+    const parsed = React.useMemo(() => window.parseInsurancePaste(text, names, workedByName), [text, workedKey]);
     React.useEffect(() => setEdits({}), [text]);
     const readImage = async file => {
       setOcrStatus('辨識圖片中…（第一次使用需下載辨識資料，約 30 秒）');
