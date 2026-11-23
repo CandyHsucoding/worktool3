@@ -33,25 +33,42 @@
   const validDays = days => Number.isInteger(days) && days >= 1 && days <= 31 ? days : null;
 
   // 用保費的計算關係檢查辨識結果：勞退＝級距×6%×天數/30；勞保個人負擔約為機關補助的 2/7
-  // grades：可能的勞退級距（本列讀到的勞退級距、勞保級距、全表最常見的級距），worked：工時表的出勤天數
-  const checkRow = (row, fromImage, grades, worked) => {
+  // 勞退金額對得上「級距×6%×天數÷30」時，回傳對上的級距與天數（先試 dayOptions，再試 1~31 天）
+  const matchPension = (row, grades, dayOptions) => {
+    const fits = (grade, days) => pensionOf(grade, days) === row.pensionPublic;
+    for (const grade of grades) for (const days of dayOptions) if (fits(grade, days)) return { grade, days };
+    if (row.pensionPublic) for (const grade of grades) for (let days = 1; days <= 31; days++) if (fits(grade, days)) return { grade, days };
+    return null;
+  };
+  // 天數讀不到時，用勞保金額推算：勞保依天數比例計算，拿同表已確認天數的人比對（如整月 1132 元，則 1132 元＝30 天）
+  const laborDaysOf = (row, refs) => {
+    if (!(row.laborPublic >= 20)) return null;
+    for (const ref of [...refs].sort((a, b) => b.days - a.days)) {
+      const days = Math.round(row.laborPublic * ref.days / ref.laborPublic);
+      if (validDays(days) && Math.abs(Math.round(ref.laborPublic * days / ref.days) - row.laborPublic) <= 1) return days;
+    }
+    return null;
+  };
+
+  // grades：可能的勞退級距（全表重複出現的級距），worked：工時表的出勤天數，laborDays：由勞保金額推算的天數
+  const checkRow = (row, fromImage, grades, worked, laborDays) => {
     const notes = [];
     if (fromImage) {
       // 圖片的灰底欄、合併儲存格常讀錯，用公式把級距、天數、勞退金額互相驗證
-      const dayOptions = [validDays(row.days), validDays(worked)].filter(Boolean);
-      const fits = (grade, days) => pensionOf(grade, days) === row.pensionPublic;
-      let found = null;
-      for (const grade of grades) for (const days of dayOptions) if (!found && fits(grade, days)) found = { grade, days };
-      for (const grade of grades) for (let days = 1; days <= 31 && !found; days++) if (row.pensionPublic && fits(grade, days)) found = { grade, days };
+      const ocrDays = validDays(row.days);
+      const found = matchPension(row, grades, [ocrDays, laborDays, validDays(worked)].filter(Boolean));
       if (found) {
         row.pensionGrade = found.grade;
-        if (!validDays(row.days) || row.days !== found.days) row.days = found.days; // 天數讀錯時以勞退金額反推
+        row.days = found.days; // 天數讀錯時以勞退金額反推
       } else if (grades.length) {
-        const days = validDays(row.days) ?? validDays(worked);
+        // 投保天數以保費表為準：讀到的天數 → 由勞保金額推算 → 最後才用工時表的出勤天數
+        const days = ocrDays ?? laborDays ?? validDays(worked);
+        const source = ocrDays ? days + ' 天' : laborDays ? days + ' 天（由勞保金額推算）' : days + ' 天（投保天數讀不到，暫用出勤天數）';
         if (days) {
           const expected = pensionOf(grades[0], days);
-          notes.push('勞退公付讀成 ' + row.pensionPublic + '，看不清楚，已依「級距 ' + grades[0] + '×6%×' + days + ' 天÷30」算成 ' + expected + '，請核對');
-          row.pensionPublic = expected; row.pensionGrade = grades[0]; row.days = days;
+          notes.push('勞退公付讀成 ' + row.pensionPublic + '，看不清楚，已依「級距 ' + grades[0] + '×6%×' + source + '÷30」算成 ' + expected + '，請核對');
+          row.pensionPublic = expected; row.pensionGrade = grades[0];
+          row.days = ocrDays || laborDays || null;
         } else notes.push('勞退公付看不清楚，請對照圖片填寫');
       }
     } else if (row.pensionGrade && row.days) {
@@ -123,10 +140,15 @@
     const common = all.some(grade => counts[grade] >= 2) ? all.filter(grade => counts[grade] >= 2) : all;
     return {
       month: period ? Number(period[1]) : null,
-      rows: rows.map(({ tabbed, ...row }) => {
-        const grades = common;
-        return checkRow(row, !tabbed, grades, workedByName[row.name]);
-      })
+      rows: (() => {
+        // 先找出勞退金額對得上公式的人（天數確定），當作推算其他人天數的勞保比對基準
+        const refs = rows.filter(row => !row.tabbed && row.laborPublic >= 20).map(row => {
+          const found = matchPension(row, common, [validDays(row.days), validDays(workedByName[row.name])].filter(Boolean));
+          return found && { days: found.days, laborPublic: row.laborPublic };
+        }).filter(Boolean);
+        return rows.map(({ tabbed, ...row }) =>
+          checkRow(row, !tabbed, common, workedByName[row.name], tabbed ? null : laborDaysOf(row, refs)));
+      })()
     };
   };
 
