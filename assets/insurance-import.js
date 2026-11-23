@@ -290,18 +290,17 @@
           h('thead', null, h('tr', null, ['姓名', '投保天數', '本月出勤天數', ...fields.map(([, title]) => title)].map(title => h('th', { key: title }, title)))),
           h('tbody', null, usable.map(row => {
             const worked = workedDays(row.staff, year, month);
-            const mismatch = row.days !== null && row.days !== worked;
             return h('tr', { key: row.name },
               h('td', null, row.name),
-              h('td', { className: mismatch ? 'insurance-mismatch' : undefined }, row.days ?? '—'),
-              h('td', { className: mismatch ? 'insurance-mismatch' : undefined }, worked),
+              h('td', null, row.days ?? '—'),
+              h('td', null, worked),
               ...fields.map(([key, title]) => h('td', { key }, h('input', {
                 type: 'number', min: 0, value: row[key], 'aria-label': row.name + ' ' + title,
                 onChange: event => edit(row.name, key, event.target.value)
               }))));
           }))),
         usable.some(row => row.days !== null && row.days !== workedDays(row.staff, year, month)) &&
-          h('p', { className: 'payroll-error' }, '紅字：投保天數與上方工時表的出勤天數不同，請確認。'),
+          h('p', { className: 'payroll-explanation' }, '投保天數與出勤天數不同是正常的，保費一律依總務處的表帶入。'),
         usable.filter(row => row.notes.length).map(row => h('p', { key: row.name, className: 'payroll-error' }, row.name + '：' + row.notes.join('；'))),
         skipped.length > 0 && h('p', { className: 'payroll-explanation' }, '本工具沒有這些人員，已略過：' + skipped.join('、'))),
       h('div', { className: 'payroll-actions' },
