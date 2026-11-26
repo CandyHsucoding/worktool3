@@ -109,9 +109,37 @@ const TimesheetApp = () => {
       '2026-12-14': '本校廚工出勤',
       '2026-12-21': '校慶補休'
     };
-    if (y === 2026) return holidays2026[dateStr] || null;
+    // 116年政府行政機關辦公日曆表
+    const holidays2027 = {
+      '2027-02-04': '小年夜',
+      '2027-02-05': '除夕',
+      '2027-02-06': '春節',
+      '2027-02-07': '春節',
+      '2027-02-08': '春節',
+      '2027-02-09': '春節補假',
+      '2027-02-10': '春節補假',
+      '2027-03-01': '和平紀念日補假',
+      '2027-04-06': '兒童節補假',
+      '2027-04-30': '勞動節補假',
+      '2027-06-09': '端午節',
+      '2027-09-15': '中秋節',
+      '2027-10-11': '國慶日補假',
+      '2027-12-24': '行憲紀念日補假',
+      '2027-12-31': '補假'
+    };
+    const listed = (y === 2026 ? holidays2026 : y === 2027 ? holidays2027 : {})[dateStr];
+    if (listed) return listed;
+    // 寒暑假不供餐（與送餐排班系統相同）；未列出的暑假以 7/1～8/30 計
+    const schoolBreak = schoolBreaks.find(item => dateStr >= item.start && dateStr <= item.end);
+    if (schoolBreak) return schoolBreak.name;
+    const summerListed = schoolBreaks.some(item => item.name === '暑假' && item.start.startsWith(String(y)));
+    if (!summerListed && dateStr >= `${y}-07-01` && dateStr <= `${y}-08-30`) return '暑假';
     return null;
   };
+  const schoolBreaks = [
+    { start: '2026-07-01', end: '2026-08-30', name: '暑假' },
+    { start: '2027-01-21', end: '2027-02-10', name: '寒假' }
+  ];
   // 週末但學校需要供餐的日期，視為上班日
   const extraWorkdays = {};
   const getDaysInMonth = (y, m) => {
